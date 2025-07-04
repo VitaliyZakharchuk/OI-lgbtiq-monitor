@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>LGBT Incidents Map</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@2.0.0-alpha/dist/leaflet.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <style>
+    body{margin:0;font-family:system-ui,sans-serif}
+    #toolbar{padding:1rem;background:#f7f7f7}
+    #map{height:520px}
+    #analytics{padding:1rem}
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <label>Choose date:
+      <input id="dp" placeholder="YYYY-MM-DD">
+    </label>
+    <a href="index.html">← Back</a>
+  </div>
+
+  <div id="map"></div>
+  <section id="analytics"></section>
+
+  <!-- JS -->
+  <script src="https://unpkg.com/leaflet@2.0.0-alpha/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <script>
+    /* 1. базова карта */
+    const map = L.map('map').setView([20,0],2);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:6}).addTo(map);
+    let layer;                                       // тримаємо посилання на поточний GeoJSON
+
+    /* 2. календар */
+    flatpickr('#dp',{
+      defaultDate:"today",
+      onChange:(_sel,date)=>load(date)
+    });
+
+    /* 3. завантаження даних */
+    async function load(date){
+      const url = `data/${date}.json`;               // ex: data/2025-07-04.json
+      const res = await fetch(url);
+      if(!res.ok){ alert('No data for that day'); return; }
+      const j = await res.json();
+
+      if(layer) map.removeLayer(layer);              // чистимо старий шар
+      layer = L.geoJson(j.geojson,{
+        style:f=>({fillColor:'#00B398',fillOpacity:0.6,weight:0.4}),
+        onEachFeature:(f,l)=>l.bindPopup(
+          `<b>${f.properties.country}</b>: ${f.properties.count} incidents`)
+      }).addTo(map);
+
+      renderAnalytics(j);
+    }
+
+    /* 4. аналітика */
+    function renderAnalytics(j){
+      document.getElementById('analytics').innerHTML = `
+        <h3>Top-5 incidents (${j.date})</h3>
+        <ol>${j.top5.map(i=>`<li>${i.summary}</li>`).join('')}</ol>
+        <canvas id="trend" height="200"></canvas>`;
+      new Chart(document.getElementById('trend'),{
+        type:'line',
+        data:{labels:j.totals.dates,
+              datasets:[{data:j.totals.values,label:'Incidents'}]},
+        options:{responsive:true,plugins:{legend:{display:false}}}
+      });
+    }
+
+    /* initial load (today) */
+    load(new Date().toISOString().slice(0,10));
+  </script>
+</body>
+</html>
